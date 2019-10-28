@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:jms="http://www.springframework.org/schema/jms"
+	xmlns:jee="http://www.springframework.org/schema/jee"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+     http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+     http://www.springframework.org/schema/jee
+     http://www.springframework.org/schema/jee/spring-jee-3.0.xsd
+     http://www.springframework.org/schema/context
+     http://www.springframework.org/schema/context/spring-context-3.0.xsd
+     http://www.springframework.org/schema/tx
+     http://www.springframework.org/schema/tx/spring-tx-3.0.xsd
+    http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+	http://www.springframework.org/schema/jms http://www.springframework.org/schema/jms/spring-jms-3.0.xsd">
+
+	<bean id="weblogicJms" class="org.springframework.jndi.JndiTemplate">  
+        <property name="environment">  
+            <props>  
+                <prop key="java.naming.factory.initial">  
+                    weblogic.jndi.WLInitialContextFactory   
+                </prop>  
+                <prop key="java.naming.provider.url">  
+                    t3://10.19.22.94:7011  
+                </prop>  
+                <prop key="java.naming.factory.url.pkgs">  
+                    weblogic.jndi.factories  
+                </prop>  
+                <prop key="java.naming.security.principal">  
+                    weblogic  
+                </prop>  
+                <prop key="java.naming.security.credentials">  
+                    weblogic123  
+                </prop>  
+            </props>  
+        </property>  
+    </bean>  
+	
+	 <!-- Connection factory -->  
+    <bean id="jmsConnectionFactory" class="org.springframework.jndi.JndiObjectFactoryBean">  
+        <property name="jndiName" value="gt3.esb.jms.con.ESBConnectionFactory" />  
+        <property name="jndiTemplate" ref="weblogicJms"/>  
+    </bean>  
+      
+    <!-- Queue -->  
+    <bean id="jmsQueue" class="org.springframework.jndi.JndiObjectFactoryBean">  
+        <property name="jndiName" value="gt3.esb.jms.mdb.BaseQueueAsynMDBean" />  
+        <property name="jndiTemplate" ref="weblogicJms"/>  
+    </bean>  
+      
+    <!-- Receiver -->  
+    <bean id="jmsReceiver" class="com.inspur.JMS.service.QueueMsgReceiver1">  
+    </bean> 
+    
+    <bean id="jmsReceiverJDBC" class="com.inspur.JDBCTemplate.listener.ConsumerMessageListener">  
+    </bean>  
+      
+    <!-- Message Listener -->  
+    <!-- 在Spring整合JMS的应用中，如果我们要进行本地的事务管理的话非常简单，只需要在定义对应的消息监听容器时
+    	指定其sessionTransacted属性为true，如：  <property name="sessionTransacted" value="true"/>    该属性值默认为false，
+    	这样JMS在进行消息监听的时候就会进行事务控制，
+    	当在接收消息时监听器执行失败时JMS就会对接收到的消息进行回滚-->
+    <!--   如果想接收消息和数据库访问处于同一事务中，那么我们就可以配置一个外部的事务管理同时配置一个支持外部事务管理的消息监听容器
+                 （如DefaultMessageListenerContainer）。要配置这样一个参与分布式事务管理的消息监听容器，
+  	 	我们可以配置一个JtaTransactionManager，当然底层的JMS ConnectionFactory需要能够支持分布式事务管理，
+  	  	并正确地注册我们的JtaTransactionManager。这样消息监听器进行消息接收和对应的数据库访问就会处于同一数据库控制下，
+  	          当消息接收失败或数据库访问失败都会进行事务回滚操作。当给消息监听容器指定了transactionManager时，
+  	          消息监听容器将忽略sessionTransacted的值。 -->
+    <bean id="listenerContainer"  
+        class="org.springframework.jms.listener.DefaultMessageListenerContainer">  
+        <property name="connectionFactory" ref="jmsConnectionFactory"/>  
+        <property name="destination" ref="jmsQueue"/>  
+        <!-- <property name="messageListener" ref="jmsReceiver"/>   -->
+        <property name="messageListener" ref="jmsReceiverJDBC"/>  
+        <property name="transactionManager" ref="jtaTransactionManager"/>  
+        <property name="autoStartup" value="true"/>  
+    </bean>  
+    
+    <bean id="jtaTransactionManager" class="org.springframework.transaction.jta.JtaTransactionManager"/>  
+    
+    <tx:annotation-driven transaction-manager="jtaTransactionManager"/>
+    
+    <!-- Spring JMS Template -->  
+    <bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate" lazy-init="true">  
+        <property name="connectionFactory" ref="jmsConnectionFactory" />  
+        <property name="defaultDestination" ref="jmsQueue" />   
+   </bean>  
+      
+    <!-- Sender -->  
+    <bean id="jmsSender" class="com.inspur.JMS.controller.SendJMSMessage"  
+        lazy-init="true">  
+        <property name="jmsTemplate" ref="jmsTemplate"></property>  
+    </bean>  
+	
+	<bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+		<property name="dataSource" ref="dataSource"/>
+	</bean>
+	
+	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"       
+        destroy-method="close">      
+    <property name="driverClassName" value="oracle.jdbc.driver.OracleDriver" />      
+    <property name="url" value="jdbc:oracle:thin:@10.19.22.91:1521:orcl" />      
+    <property name="username" value="ydpt" />      
+    <property name="password" value="ydpt" />      
+	</bean> 
+
+    <bean id="Student" class="entity.student">  
+        <property name="name">  
+            <value>Tom</value>  
+        </property>  
+    </bean>  
+     
+     <context:component-scan base-package="com.inspur" >
+		<context:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+	</context:component-scan>
+    
+	
+</beans>
